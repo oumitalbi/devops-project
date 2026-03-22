@@ -2,58 +2,43 @@ pipeline {
     agent any
 
     environment {
-        // REMPLACE par ton pseudo Docker Hub
         DOCKER_HUB_USER = '1oumaima2'
-        APP_NAME        = 'phishing-detection'
-        REGISTRY        = "${DOCKER_HUB_USER}/${APP_NAME}"
+        IMAGE_NAME = 'gestion-produits'
+        IMAGE_TAG = '1'
+        KUBECONFIG_PATH = '/var/lib/jenkins/config'
     }
 
     stages {
-        stage('Nettoyage et Préparation') {
+        stage('Checkout Code') {
             steps {
-                deleteDir() // Nettoie l'espace de travail précédent
-                checkout scm // Récupère le code depuis GitHub
+                checkout scm
             }
         }
 
-        stage('Build Image Docker') {
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                // MISE À JOUR : J'ai mis 'docker-hub-creds' comme sur ta photo
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                    sh "echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin"
+                    sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    sh "docker build -t ${REGISTRY}:${BUILD_NUMBER} ."
-                    sh "docker tag ${REGISTRY}:${BUILD_NUMBER} ${REGISTRY}:latest"
+                    sh "KUBECONFIG=${KUBECONFIG_PATH} kubectl apply -f deployment.yaml"
+                    // Force le redémarrage pour être sûr que Kubernetes prend la nouvelle image
+                    sh "KUBECONFIG=${KUBECONFIG_PATH} kubectl rollout restart deployment/product-app-deployment"
                 }
             }
-        }
-
-        stage('Push sur Docker Hub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
-                    sh "echo \$PASS | docker login -u \$USER --password-stdin"
-                    sh "docker push ${REGISTRY}:${BUILD_NUMBER}"
-                    sh "docker push ${REGISTRY}:latest"
-                }
-            }
-        }
-
-        stage('Déploiement sur Kubernetes') {
-            steps {
-                script {
-                    // Utilise le fichier de config K8s déjà présent sur ton Master-VM
-                    sh "kubectl apply -f deployment.yaml"
-                    
-                    // Force la mise à jour des pods avec la nouvelle image
-                    sh "kubectl rollout restart deployment/phishing-app-deployment"
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Déploiement terminé avec succès ! Accède à l'app sur http://20.199.189.94:30001"
-        }
-        failure {
-            echo "Le pipeline a échoué. Vérifie les logs de Jenkins."
         }
     }
 }

@@ -1,36 +1,35 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: phishing-app-deployment
-  labels:
-    app: phishing-detection
+  name: product-app-deployment
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: phishing-detection
+      app: product-app
   template:
     metadata:
       labels:
-        app: phishing-detection
+        app: product-app
     spec:
       containers:
-      - name: phishing-container
-        # REMPLACE 'ton-pseudo' par ton nom d'utilisateur Docker Hub
-        image: ton-pseudo/phishing-detection:latest
+      - name: product-container
+        image: 1oumaima2/gestion-produits:1
         ports:
         - containerPort: 5000
+        imagePullPolicy: Always
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: phishing-service
+  name: product-service
 spec:
   type: NodePort
   selector:
-    app: phishing-detection
+    app: product-app
   ports:
     - protocol: TCP
       port: 80
       targetPort: 5000
-      nodePort: 30001  # Port ouvert dans ton main.tf Azure
+      nodePort: 30001
