@@ -1,169 +1,59 @@
 pipeline {
     agent any
 
-    parameters {
-        booleanParam(name: 'DEPLOY', defaultValue: true, description: 'Deploy to Kubernetes')
-    }
-
     environment {
-        IMAGE_NAME = 'inventory-app'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
-        DOCKERHUB_REPO = 'hasnaeelmir/inventory-app'
-        REPORT_DIR = 'reports'
-        PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+        // REMPLACE par ton pseudo Docker Hub
+        DOCKER_HUB_USER = 'ton-pseudo'
+        APP_NAME        = 'phishing-detection'
+        REGISTRY        = "${DOCKER_HUB_USER}/${APP_NAME}"
     }
 
     stages {
-
-        // -----------------------------
-        // 1. Checkout
-        // -----------------------------
-        stage('Checkout') {
+        stage('Nettoyage et Préparation') {
             steps {
-                git branch: 'main', url: 'https://github.com/tonrepo/inventory-app.git'
+                deleteDir() // Nettoie l'espace de travail précédent
+                checkout scm // Récupère le code depuis GitHub
             }
         }
 
-        // -----------------------------
-        // 2. Install Dependencies
-        // -----------------------------
-        stage('Install Dependencies') {
+        stage('Build Image Docker') {
             steps {
                 script {
-                    if (isUnix()) {
-                        sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install --upgrade pip
-                            pip install -r requirements.txt
-                        '''
-                    } else {
-                        bat '''
-                            "%PYTHON_PATH%" -m venv venv
-                            call venv\\Scripts\\activate.bat
-                            venv\\Scripts\\python -m pip install --upgrade pip
-                            venv\\Scripts\\pip install -r requirements.txt
-                        '''
-                    }
+                    sh "docker build -t ${REGISTRY}:${BUILD_NUMBER} ."
+                    sh "docker tag ${REGISTRY}:${BUILD_NUMBER} ${REGISTRY}:latest"
                 }
             }
         }
 
-        // -----------------------------
-        // 3. Run Tests
-        // -----------------------------
-        stage('Run Tests') {
+        stage('Push sur Docker Hub') {
             steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            mkdir -p ${REPORT_DIR}
-                            . venv/bin/activate
-                            pytest -v --junitxml=${REPORT_DIR}/pytest.xml
-                        '''
-                    } else {
-                        bat '''
-                            if not exist %REPORT_DIR% mkdir %REPORT_DIR%
-                            call venv\\Scripts\\activate.bat
-                            venv\\Scripts\\pytest -v --junitxml=%REPORT_DIR%\\pytest.xml
-                        '''
-                    }
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                    sh "echo \$PASS | docker login -u \$USER --password-stdin"
+                    sh "docker push ${REGISTRY}:${BUILD_NUMBER}"
+                    sh "docker push ${REGISTRY}:latest"
                 }
             }
         }
 
-        // -----------------------------
-        // 4. Build Docker Image
-        // -----------------------------
-        stage('Build Docker Image') {
+        stage('Déploiement sur Kubernetes') {
             steps {
                 script {
-                    if (isUnix()) {
-                        sh '''
-                            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
-                        '''
-                    } else {
-                        bat '''
-                            docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
-                            docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
-                        '''
-                    }
-                }
-            }
-        }
-
-        // -----------------------------
-        // 5. Push to Docker Hub
-        // -----------------------------
-        stage('Push to DockerHub') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                            sh '''
-                                docker login -u $USER -p $PASS
-                                docker push ${DOCKERHUB_REPO}:latest
-                            '''
-                        }
-                    } else {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                            bat '''
-                                docker login -u %USER% -p %PASS%
-                                docker push %DOCKERHUB_REPO%:latest
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
-        // -----------------------------
-        // 6. Deploy to Kubernetes (Azure VM)
-        // -----------------------------
-        stage('Deploy to Kubernetes') {
-            when {
-                expression { params.DEPLOY }
-            }
-            steps {
-                withCredentials([file(credentialsId: 'KUBE_CONFIG', variable: 'KUBECONFIG_FILE')]) {
-                    script {
-                        if (isUnix()) {
-                            sh '''
-                                mkdir -p ~/.kube
-                                cp $KUBECONFIG_FILE ~/.kube/config
-                                export KUBECONFIG=~/.kube/config
-
-                                kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest --record
-                                kubectl rollout status deployment/inventory-app
-
-                                kubectl get pods
-                                kubectl get svc
-                            '''
-                        } else {
-                            bat '''
-                                mkdir %USERPROFILE%\\.kube
-                                copy %KUBECONFIG_FILE% %USERPROFILE%\\.kube\\config
-                                set KUBECONFIG=%USERPROFILE%\\.kube\\config
-
-                                kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest --record
-                                kubectl rollout status deployment/inventory-app
-
-                                kubectl get pods
-                                kubectl get svc
-                            '''
-                        }
-                    }
+                    // Utilise le fichier de config K8s déjà présent sur ton Master-VM
+                    sh "kubectl apply -f deployment.yaml"
+                    
+                    // Force la mise à jour des pods avec la nouvelle image
+                    sh "kubectl rollout restart deployment/phishing-app-deployment"
                 }
             }
         }
     }
 
     post {
-        always {
-            junit testResults: 'reports/pytest.xml', allowEmptyResults: true
-            archiveArtifacts artifacts: 'reports/*.xml', allowEmptyArchive: true
-            cleanWs()
+        success {
+            echo "Déploiement terminé avec succès ! Accède à l'app sur http://20.199.189.94:30001"
+        }
+        failure {
+            echo "Le pipeline a échoué. Vérifie les logs de Jenkins."
         }
     }
 }

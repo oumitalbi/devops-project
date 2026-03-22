@@ -1,29 +1,25 @@
-# ═══════════════════════════════════════════════════
-# Inventory App — Dockerfile
-# Lightweight Python image for Flask deployment
-# ═══════════════════════════════════════════════════
+# Utilisation d'une image Python légère
+FROM python:3.9-slim
 
-# Use official Python slim image
-FROM python:3.10-slim
-
-# Set working directory inside the container
+# Définition du dossier de travail
 WORKDIR /app
 
-# Copy dependency file first (for Docker layer caching)
+# Installation des dépendances système nécessaires
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copie du fichier des dépendances
 COPY requirements.txt .
 
-# Install Python dependencies
+# Installation des bibliothèques Python (pandas, scikit-learn, flask, etc.)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code
+# Copie de tout le code source (app.py, model.pkl, etc.)
 COPY . .
 
-# Expose Flask's default port
+# Exposition du port interne de l'application
 EXPOSE 5000
 
-# Set environment variables
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
-
-# Run the app with Gunicorn (production-ready server)
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+# Commande pour lancer l'application
+CMD ["python", "app.py"]
