@@ -168,7 +168,7 @@ curl -X POST http://localhost:5000/products \
 | --------- | --------------------------- |
 | Backend   | Flask (Python)              |
 | Frontend  | HTML + CSS + JavaScript     |
-| Design    | Glassmorphism + Antigravity |
+| Design    | Glassmorphism 
 | Server    | Gunicorn                    |
 | Container | Docker                      |
 | CI/CD     | Jenkins                     |
