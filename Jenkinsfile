@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         // REMPLACE par ton pseudo Docker Hub
-        DOCKER_HUB_USER = 'ton-pseudo'
+        DOCKER_HUB_USER = '1oumaima2'
         APP_NAME        = 'phishing-detection'
         REGISTRY        = "${DOCKER_HUB_USER}/${APP_NAME}"
     }
