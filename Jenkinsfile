@@ -14,7 +14,17 @@ pipeline {
                 checkout scm
             }
         }
-
+        stage('Unit Tests') {
+            steps {
+                script {
+                    echo "--- Phase de Test : Vérification de la logique métier ---"
+                    // On installe les dépendances nécessaires à l'exécution des tests
+                    sh "pip install -r requirements.txt"
+                    // On lance les tests unitaires avec pytest
+                    sh "python3 -m pytest tests/"
+                }
+            }
+        }
         stage('Build Docker Image') {
             steps {
                 sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} ."
